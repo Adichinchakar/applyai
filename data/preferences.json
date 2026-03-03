@@ -1,0 +1,33 @@
+{
+  "targetRoles": [
+    "Senior Product Designer",
+    "Staff Designer",
+    "Head of Design",
+    "Lead Product Designer"
+  ],
+  "targetLevel": "Senior / Staff / Lead",
+  "targetSalaryMin": 120000,
+  "remotePreference": "remote",
+  "targetLocations": [
+    "Remote"
+  ],
+  "targetDomains": [
+    "AI/ML",
+    "Design Tools",
+    "EdTech",
+    "FinTech",
+    "HealthTech"
+  ],
+  "excludeCompanies": [],
+  "minFitScore": 7,
+  "fullName": "Aditya Chinchakar",
+  "email": "adichinchakar@gmail.com",
+  "phone": "+919325232544",
+  "linkedinUrl": "https://linkedin.com/in/adityachinchakar",
+  "portfolioUrl": "https://portfolio-adichinchakar.vercel.app/",
+  "workAuthorization": "Yes - citizen",
+  "yearsOfExperience": 7,
+  "currentCompany": "Infosys",
+  "currentTitle": "Senior Product Designer",
+  "startDate": "3 Months"
+}
