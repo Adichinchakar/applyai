@@ -21,6 +21,7 @@ export function JobCard({ job, onStatusChange }: JobCardProps) {
     if (!url) return null;
     if (url.includes('remoteok.com')) return 'RemoteOK';
     if (url.includes('weworkremotely.com')) return 'WWR';
+    if (url.includes('remotive.com')) return 'Remotive';
     if (url.includes('indeed.com')) return 'Indeed';
     if (url.includes('wellfound.com')) return 'Wellfound';
     return null;
