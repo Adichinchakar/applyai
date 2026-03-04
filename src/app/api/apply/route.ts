@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
           currentTitle: prefs.currentTitle || '',
           resumeFilePath: path.join(process.cwd(), 'data', 'resume.pdf'),
           coverLetterText: job.coverLetter || '',
-          salaryExpectation: prefs.targetSalaryMin ? `$${prefs.targetSalaryMin.toLocaleString()}` : '',
+          salaryExpectation: prefs.salaryExpectation || (prefs.targetSalaryMin ? `$${prefs.targetSalaryMin.toLocaleString()}` : ''),
           startDate: prefs.startDate || '',
         };
 
