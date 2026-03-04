@@ -1,10 +1,28 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getDb } from '@/lib/db';
 
-export const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || '',
-});
+export async function getGemini() {
+  let apiKey = process.env.GEMINI_API_KEY || '';
+
+  try {
+    const db = getDb();
+    const rows = await db`SELECT value FROM settings WHERE key = 'api_key'`;
+    if (rows.length > 0 && typeof rows[0].value === 'string') {
+      apiKey = rows[0].value;
+    }
+  } catch (e) {
+    // Ignore DB errors
+  }
+
+  // User explicitly asked to use this key in chat
+  if (!apiKey) {
+    apiKey = 'AIzaSyCxu2uwfFmLQpcHamfx6p8302l4mK6M4nQ';
+  }
+
+  return new GoogleGenerativeAI(apiKey);
+}
 
 export const MODELS = {
-  smart: 'claude-sonnet-4-5',       // scoring (tool_use), cover letters — quality + structured output
-  fast:  'claude-3-haiku-20240307', // company research, resume tailor — speed + cost
+  smart: 'gemini-2.5-flash',       // scoring, cover letters
+  fast: 'gemini-2.5-flash', // company research, resume tailor
 } as const;

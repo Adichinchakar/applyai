@@ -1,4 +1,4 @@
-import { anthropic, MODELS } from '@/lib/claude';
+import { getGemini, MODELS } from '@/lib/claude';
 import { CompanyResearch } from '@/types';
 
 async function fetchUrl(url: string, timeout = 5000): Promise<string | null> {
@@ -54,14 +54,39 @@ ${companyContext}
 
 Return ONLY valid JSON, no other text.`;
 
-  const response = await anthropic.messages.create({
+  const genAI = await getGemini();
+  const model = genAI.getGenerativeModel({
     model: MODELS.fast,
-    max_tokens: 1024,
-    system: 'You are a company research analyst. Extract structured information about companies from web content. Return only valid JSON.',
-    messages: [{ role: 'user', content: prompt }],
+    systemInstruction: 'You are a company research analyst. Extract structured information about companies from web content. Return only valid JSON.',
+    generationConfig: {
+      temperature: 0.1,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'object' as any,
+        properties: {
+          companySummary: { type: 'string' as any, description: '2-3 sentence description of what the company does' },
+          companySize: { type: 'string' as any, enum: ["startup (<50)", "scaleup (50-500)", "enterprise (500+)"] },
+          fundingStage: { type: 'string' as any, enum: ["bootstrapped", "seed", "series-a", "series-b+", "public"] },
+          recentNews: {
+            type: 'array' as any,
+            items: {
+              type: 'object' as any,
+              properties: {
+                title: { type: 'string' as any },
+                url: { type: 'string' as any },
+                date: { type: 'string' as any },
+              },
+              required: ['title', 'url', 'date']
+            }
+          }
+        },
+        required: ['companySummary', 'companySize', 'fundingStage', 'recentNews']
+      }
+    }
   });
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
+  const response = await model.generateContent(prompt);
+  const text = response.response.text();
 
   try {
     const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();

@@ -1,5 +1,5 @@
 import { Page } from 'playwright';
-import { anthropic, MODELS } from '@/lib/claude';
+import { getGemini, MODELS } from '@/lib/claude';
 import { FormField, ApplicationData } from '@/types';
 import fs from 'fs';
 import path from 'path';
@@ -42,31 +42,22 @@ For cover letter fields, use value: "[COVER_LETTER]" as placeholder.
 
 Return ONLY a valid JSON array, no other text. If you detect a CAPTCHA, return: [{"label":"CAPTCHA","selectorHint":"captcha","fieldType":"checkbox","value":"CAPTCHA_REQUIRED","required":true}]`;
 
-  const response = await anthropic.messages.create({
+  const genAI = await getGemini();
+  const model = genAI.getGenerativeModel({
     model: MODELS.smart,
-    max_tokens: 1024,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: 'image/png',
-              data: screenshotBase64,
-            },
-          },
-          {
-            type: 'text',
-            text: prompt,
-          },
-        ],
-      },
-    ],
   });
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
+  const response = await model.generateContent([
+    prompt,
+    {
+      inlineData: {
+        data: screenshotBase64,
+        mimeType: 'image/png'
+      }
+    }
+  ]);
+
+  const text = response.response.text() || '';
 
   try {
     const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
@@ -158,31 +149,22 @@ export async function fillApplicationForm(
     const verifyScreenshot = await page.screenshot({ fullPage: false });
     const verifyBase64 = verifyScreenshot.toString('base64');
 
-    const verifyResponse = await anthropic.messages.create({
+    const genAI = await getGemini();
+    const model = genAI.getGenerativeModel({
       model: MODELS.smart,
-      max_tokens: 256,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: 'image/png',
-                data: verifyBase64,
-              },
-            },
-            {
-              type: 'text',
-              text: 'Are the form fields filled in? Return JSON: {"filled": true/false, "issues": ["any issues found"], "readyToSubmit": true/false}',
-            },
-          ],
-        },
-      ],
     });
 
-    const verifyText = verifyResponse.content[0].type === 'text' ? verifyResponse.content[0].text : '';
+    const verifyResponse = await model.generateContent([
+      'Are the form fields filled in? Return JSON: {"filled": true/false, "issues": ["any issues found"], "readyToSubmit": true/false}',
+      {
+        inlineData: {
+          data: verifyBase64,
+          mimeType: 'image/png'
+        }
+      }
+    ]);
+
+    const verifyText = verifyResponse.response.text() || '';
     let verifyData = { filled: true, issues: [] as string[], readyToSubmit: true };
 
     try {

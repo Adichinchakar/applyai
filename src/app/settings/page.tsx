@@ -354,13 +354,13 @@ export default function SettingsPage() {
           >
             <h2 className="text-sm font-semibold" style={{ color: '#F4F4F5' }}>API Keys</h2>
             <div className="space-y-2">
-              <label className="text-xs" style={{ color: '#A1A1AA' }}>Anthropic API Key (from console.anthropic.com)</label>
+              <label className="text-xs" style={{ color: '#A1A1AA' }}>Gemini API Key (from aistudio.google.com)</label>
               <div className="flex gap-2">
                 <input
                   type={showKey ? 'text' : 'password'}
                   value={apiKey}
                   onChange={e => setApiKey(e.target.value)}
-                  placeholder="sk-ant-api03-..."
+                  placeholder="AIzaSy..."
                   className="flex-1 px-3 py-2 rounded-xl text-sm border outline-none"
                   style={inputStyle}
                 />

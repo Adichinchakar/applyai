@@ -1,4 +1,4 @@
-import { anthropic, MODELS } from '@/lib/claude';
+import { getGemini, MODELS } from '@/lib/claude';
 import { getDb } from '@/lib/db';
 import { Job } from '@/types';
 import fs from 'fs';
@@ -106,12 +106,15 @@ ${companyContext}
 
 Write the letter now. Address it "Dear Hiring Team," and sign off with the candidate's name.`;
 
-  const response = await anthropic.messages.create({
+  const genAI = await getGemini();
+  const model = genAI.getGenerativeModel({
     model: MODELS.smart,
-    max_tokens: 600,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
+    systemInstruction: systemPrompt,
+    generationConfig: {
+      temperature: 0.7,
+    }
   });
 
-  return response.content[0].type === 'text' ? response.content[0].text : '';
+  const response = await model.generateContent(userPrompt);
+  return response.response.text() || '';
 }

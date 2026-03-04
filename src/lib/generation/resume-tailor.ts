@@ -1,4 +1,4 @@
-import { anthropic, MODELS } from '@/lib/claude';
+import { getGemini, MODELS } from '@/lib/claude';
 import { getDb } from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
@@ -47,14 +47,14 @@ ${resumeContent}
 
 Return ONLY valid JSON, no other text.`;
 
-  const response = await anthropic.messages.create({
+  const genAI = await getGemini();
+  const model = genAI.getGenerativeModel({
     model: MODELS.fast,
-    max_tokens: 2048,
-    system: 'You are an expert resume writer who tailors resumes to match job descriptions while keeping all content truthful. Never fabricate experience or metrics.',
-    messages: [{ role: 'user', content: prompt }],
+    systemInstruction: 'You are an expert resume writer who tailors resumes to match job descriptions while keeping all content truthful. Never fabricate experience or metrics.',
   });
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
+  const response = await model.generateContent(prompt);
+  const text = response.response.text() || '';
 
   try {
     const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
