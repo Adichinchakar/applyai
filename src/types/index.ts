@@ -81,6 +81,7 @@ export interface UserPreferences {
   yearsOfExperience: number;
   currentCompany: string;
   currentTitle: string;
+  salaryExpectation?: string;
   startDate: string;
 }
 

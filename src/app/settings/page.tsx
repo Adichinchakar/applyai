@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/header';
-import { Save, Upload, Eye, EyeOff, FileText, CheckCircle2, Loader2 } from 'lucide-react';
+import { Save, Upload, Eye, EyeOff, FileText, CheckCircle2, Loader2, Trash2 } from 'lucide-react';
 import { UserPreferences } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -25,6 +25,7 @@ export default function SettingsPage() {
     yearsOfExperience: 0,
     currentCompany: '',
     currentTitle: '',
+    salaryExpectation: '',
     startDate: '',
   });
   const [saving, setSaving] = useState(false);
@@ -36,6 +37,27 @@ export default function SettingsPage() {
   const [newRole, setNewRole] = useState('');
   const [newLocation, setNewLocation] = useState('');
   const [newExclude, setNewExclude] = useState('');
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<{ deleted: number; kept: number } | null>(null);
+
+  const handleCleanup = async () => {
+    setCleaning(true);
+    setCleanupResult(null);
+    try {
+      const res = await fetch('/api/admin/cleanup-jobs', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        setCleanupResult(data);
+        toast.success(`Removed ${data.deleted} irrelevant jobs`);
+      } else {
+        toast.error(data.error || 'Cleanup failed');
+      }
+    } catch {
+      toast.error('Network error');
+    } finally {
+      setCleaning(false);
+    }
+  };
 
   useEffect(() => {
     fetch('/api/settings')
@@ -258,6 +280,17 @@ export default function SettingsPage() {
                   type="text"
                   value={prefs.currentTitle}
                   onChange={e => setPrefs(p => ({ ...p, currentTitle: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl text-sm border outline-none"
+                  style={inputStyle}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs" style={{ color: '#A1A1AA' }}>Salary Expectation</label>
+                <input
+                  type="text"
+                  placeholder="e.g. $130,000 – $160,000"
+                  value={prefs.salaryExpectation || ''}
+                  onChange={e => setPrefs(p => ({ ...p, salaryExpectation: e.target.value }))}
                   className="w-full px-3 py-2 rounded-xl text-sm border outline-none"
                   style={inputStyle}
                 />
@@ -589,6 +622,36 @@ export default function SettingsPage() {
                 Exclude
               </button>
             </div>
+          </section>
+
+          {/* Database */}
+          <section
+            className="rounded-xl p-5 border space-y-4"
+            style={{ backgroundColor: '#1A1A24', borderColor: 'rgba(255,255,255,0.08)' }}
+          >
+            <h2 className="text-sm font-semibold" style={{ color: '#F4F4F5' }}>Database</h2>
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium" style={{ color: '#F4F4F5' }}>Clean up irrelevant jobs</p>
+                <p className="text-xs" style={{ color: '#71717A' }}>
+                  Removes jobs that do not match design / UX / product roles. Safe to run anytime.
+                </p>
+              </div>
+              <button
+                onClick={handleCleanup}
+                disabled={cleaning}
+                className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
+                style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.2)' }}
+              >
+                {cleaning ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {cleaning ? 'Cleaning...' : 'Clean Up Jobs'}
+              </button>
+            </div>
+            {cleanupResult && (
+              <p className="text-xs" style={{ color: '#22C55E' }}>
+                Removed {cleanupResult.deleted} irrelevant jobs. {cleanupResult.kept} design jobs kept.
+              </p>
+            )}
           </section>
         </div>
       </div>

@@ -56,6 +56,21 @@ export function JobDetail({ job, logs = [], onRefresh }: JobDetailProps) {
     }
   };
 
+  const handleStatusChange = async (newStatus: string) => {
+    try {
+      const res = await fetch(`/api/jobs/${job.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error('Update failed');
+      toast.success(`Marked as ${newStatus}`);
+      onRefresh?.();
+    } catch {
+      toast.error('Failed to update status');
+    }
+  };
+
   return (
     <div className="flex flex-col lg:flex-row gap-6 p-6 min-h-0">
       {/* Left: JD + Scores */}
@@ -110,6 +125,18 @@ export function JobDetail({ job, logs = [], onRefresh }: JobDetailProps) {
               <Building2 size={12} className={researching ? 'animate-spin' : ''} />
               {researching ? 'Researching...' : job.companySummary ? 'Re-research' : 'Research Co.'}
             </button>
+            {job.jobUrl && (
+              <a
+                href={job.jobUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#A1A1AA' }}
+              >
+                <ExternalLink size={12} />
+                Open Job Listing
+              </a>
+            )}
           </div>
         </div>
 
@@ -196,6 +223,28 @@ export function JobDetail({ job, logs = [], onRefresh }: JobDetailProps) {
         >
           <h3 className="text-sm font-semibold" style={{ color: '#F4F4F5' }}>Apply</h3>
           <ApplyButton jobId={job.id} jobUrl={job.jobUrl} onStatusChange={onRefresh} />
+
+          <div className="pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+            <p className="text-xs mb-2" style={{ color: '#52525B' }}>Quick update:</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { status: 'applied', label: 'Applied', color: '#6366F1' },
+                { status: 'interview', label: 'Interviewing', color: '#10B981' },
+                { status: 'rejected', label: 'Rejected', color: '#EF4444' },
+                { status: 'offer', label: 'Offer', color: '#F59E0B' },
+              ].map(({ status, label, color }) => (
+                <button
+                  key={status}
+                  onClick={() => handleStatusChange(status)}
+                  disabled={job.status === status}
+                  className="px-3 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-40"
+                  style={{ backgroundColor: `${color}20`, color, border: `1px solid ${color}40` }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Activity Log */}
