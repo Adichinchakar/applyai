@@ -18,7 +18,7 @@ export async function GET() {
 
     return NextResponse.json({
       preferences,
-      apiKey: process.env.ANTHROPIC_API_KEY ? '***' + process.env.ANTHROPIC_API_KEY.slice(-4) : '',
+      apiKey: process.env.GEMINI_API_KEY ? '***' + process.env.GEMINI_API_KEY.slice(-4) : '',
     });
   } catch {
     return NextResponse.json({ preferences: null, apiKey: '' });

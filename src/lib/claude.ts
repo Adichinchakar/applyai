@@ -14,9 +14,8 @@ export async function getGemini() {
     // Ignore DB errors
   }
 
-  // User explicitly asked to use this key in chat
   if (!apiKey) {
-    apiKey = 'AIzaSyCxu2uwfFmLQpcHamfx6p8302l4mK6M4nQ';
+    throw new Error('GEMINI_API_KEY is not set. Add it to .env.local (local) or Vercel Environment Variables (production).');
   }
 
   return new GoogleGenerativeAI(apiKey);
