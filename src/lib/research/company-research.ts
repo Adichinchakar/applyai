@@ -1,4 +1,4 @@
-import { genAI, MODELS, withRetry } from '@/lib/claude';
+import { anthropic, MODELS } from '@/lib/claude';
 import { CompanyResearch } from '@/types';
 
 async function fetchUrl(url: string, timeout = 5000): Promise<string | null> {
@@ -43,11 +43,6 @@ export async function researchCompany(
   );
   if (newsContent) companyContext += `\nNews RSS:\n${newsContent.slice(0, 2000)}\n`;
 
-  const model = genAI.getGenerativeModel({
-    model: MODELS.fast,
-    systemInstruction: `You are a company research analyst. Extract structured information about companies from web content.`,
-  });
-
   const prompt = `Research this company and return a JSON object with:
 - companySummary: 2-3 sentence description of what the company does
 - companySize: one of "startup (<50)", "scaleup (50-500)", "enterprise (500+)"
@@ -59,8 +54,14 @@ ${companyContext}
 
 Return ONLY valid JSON, no other text.`;
 
-  const result = await withRetry(() => model.generateContent(prompt));
-  const text = result.response.text();
+  const response = await anthropic.messages.create({
+    model: MODELS.fast,
+    max_tokens: 1024,
+    system: 'You are a company research analyst. Extract structured information about companies from web content. Return only valid JSON.',
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const text = response.content[0].type === 'text' ? response.content[0].text : '';
 
   try {
     const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
@@ -75,6 +76,6 @@ function getDefaultResearch(company: string): CompanyResearch {
     companySummary: `${company} is a technology company. Research data unavailable.`,
     companySize: 'scaleup (50-500)',
     fundingStage: 'series-a',
-    recentNews: []
+    recentNews: [],
   };
 }

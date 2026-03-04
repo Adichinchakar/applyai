@@ -1,0 +1,2 @@
+﻿src/app/api/generate/resume/route.ts(13,27): error TS2345: Argument of type 'string' is not assignable to parameter of type 'TemplateStringsArray'.
+src/app/api/stats/route.ts(57,30): error TS2345: Argument of type 'string' is not assignable to parameter of type 'TemplateStringsArray'.

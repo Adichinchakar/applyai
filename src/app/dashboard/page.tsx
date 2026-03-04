@@ -24,6 +24,10 @@ export default function DashboardPage() {
     details?: string
   }>({ status: 'idle', message: '', progress: 0 });
 
+  const [discoverResult, setDiscoverResult] = useState<{
+    newJobs: number; filtered: number; duplicates: number; sources: Record<string, number>
+  } | null>(null);
+
   const fetchData = useCallback(async () => {
     try {
       const [jobsRes, statsRes] = await Promise.all([
@@ -47,11 +51,13 @@ export default function DashboardPage() {
 
   const handleDiscover = async () => {
     setDiscovering(true);
+    setDiscoverResult(null);
     const loadingToast = toast.loading('Discovering jobs...');
     try {
       const res = await fetch('/api/jobs/discover', { method: 'POST' });
       if (!res.ok) throw new Error('Discovery failed');
       const data = await res.json();
+      setDiscoverResult(data);
       toast.success(`Found ${data.newJobs} new jobs (${data.duplicates} duplicates)`, { id: loadingToast });
       await fetchData();
     } catch {
@@ -132,32 +138,43 @@ export default function DashboardPage() {
         title="Pipeline"
         subtitle={stats ? `${stats.total} jobs tracked` : 'Loading...'}
         actions={
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleScoreAll}
-              disabled={scoringProgress.status === 'scoring' || loading}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
-              style={{ backgroundColor: '#10B981', color: 'white' }}
-            >
-              <Target size={14} className={scoringProgress.status === 'scoring' ? 'animate-pulse' : ''} />
-              {scoringProgress.status === 'scoring' ? 'Scoring...' : 'Score All'}
-            </button>
-            <button
-              onClick={handleDiscover}
-              disabled={discovering}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
-              style={{ backgroundColor: '#6366F1', color: 'white' }}
-            >
-              <Search size={14} className={discovering ? 'animate-spin' : ''} />
-              {discovering ? 'Discovering...' : 'Discover Jobs'}
-            </button>
-            <button
-              onClick={fetchData}
-              className="p-2 rounded-xl transition-all"
-              style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: '#A1A1AA' }}
-            >
-              <RefreshCw size={16} />
-            </button>
+          <div className="flex flex-col items-end">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleScoreAll}
+                disabled={scoringProgress.status === 'scoring' || loading}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
+                style={{ backgroundColor: '#10B981', color: 'white' }}
+              >
+                <Target size={14} className={scoringProgress.status === 'scoring' ? 'animate-pulse' : ''} />
+                {scoringProgress.status === 'scoring' ? 'Scoring...' : 'Score All'}
+              </button>
+              <button
+                onClick={handleDiscover}
+                disabled={discovering}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
+                style={{ backgroundColor: '#6366F1', color: 'white' }}
+              >
+                <Search size={14} className={discovering ? 'animate-spin' : ''} />
+                {discovering ? 'Discovering...' : 'Discover Jobs'}
+              </button>
+              <button
+                onClick={fetchData}
+                className="p-2 rounded-xl transition-all"
+                style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: '#A1A1AA' }}
+              >
+                <RefreshCw size={16} />
+              </button>
+            </div>
+            {discoverResult && (
+              <p className="text-xs mt-1" style={{ color: '#71717A' }}>
+                +{discoverResult.newJobs} new · {discoverResult.filtered} filtered · {discoverResult.duplicates} duplicates
+                {' · '}
+                {Object.entries(discoverResult.sources)
+                  .map(([src, count]) => `${src}: ${count}`)
+                  .join(', ')}
+              </p>
+            )}
           </div>
         }
       />

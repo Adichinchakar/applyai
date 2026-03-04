@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const format = searchParams.get('format');
 
     if (format === 'csv') {
-      const allRows = db.prepare('SELECT * FROM jobs ORDER BY discovered_at DESC').all();
+      const allRows = await db`SELECT * FROM jobs ORDER BY discovered_at DESC`;
       const allJobs = allRows.map(row => rowToJob(row as Record<string, unknown>));
 
       const csvHeader = 'Title,Company,Status,Fit Score,Recommendation,URL,Discovered At,Applied At\n';
@@ -45,21 +45,21 @@ export async function GET(request: NextRequest) {
 
     if (status) {
       if (limit > 0) {
-        rows = db.prepare('SELECT * FROM jobs WHERE status = ? ORDER BY discovered_at DESC LIMIT ? OFFSET ?').all(status, limit, offset);
+        rows = await db`SELECT * FROM jobs WHERE status = ${status} ORDER BY discovered_at DESC LIMIT ${limit} OFFSET ${offset}`;
       } else {
-        rows = db.prepare('SELECT * FROM jobs WHERE status = ? ORDER BY discovered_at DESC').all(status);
+        rows = await db`SELECT * FROM jobs WHERE status = ${status} ORDER BY discovered_at DESC`;
       }
-      totalRow = db.prepare('SELECT COUNT(*) as count FROM jobs WHERE status = ?').get(status) as { count: number };
+      totalRow = await db`SELECT COUNT(*) as count FROM jobs WHERE status = ${status}`;
     } else {
       if (limit > 0) {
-        rows = db.prepare('SELECT * FROM jobs ORDER BY discovered_at DESC LIMIT ? OFFSET ?').all(limit, offset);
+        rows = await db`SELECT * FROM jobs ORDER BY discovered_at DESC LIMIT ${limit} OFFSET ${offset}`;
       } else {
-        rows = db.prepare('SELECT * FROM jobs ORDER BY discovered_at DESC').all();
+        rows = await db`SELECT * FROM jobs ORDER BY discovered_at DESC`;
       }
-      totalRow = db.prepare('SELECT COUNT(*) as count FROM jobs').get() as { count: number };
+      totalRow = await db`SELECT COUNT(*) as count FROM jobs`;
     }
 
-    const total = totalRow.count;
+    const total = parseInt(totalRow[0].count, 10);
     const jobs = rows.map(row => rowToJob(row as Record<string, unknown>));
 
     return NextResponse.json({ jobs, total, page, limit });
@@ -103,13 +103,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
     }
 
-    setClauses.push('updated_at = datetime(\'now\')');
+    setClauses.push('updated_at = NOW()');
     values.push(id);
 
-    db.prepare(`UPDATE jobs SET ${setClauses.join(', ')} WHERE id = ?`).run(...values);
+    // Construct the query: UPDATE jobs SET col1 = $1, col2 = $2 WHERE id = $3
+    const setQuery = setClauses.map((clause, idx) => clause.replace('?', `$${idx + 1}`)).join(', ');
+    const queryStr = `UPDATE jobs SET ${setQuery} WHERE id = $${values.length}`;
+    const strings = Object.assign([queryStr], { raw: [queryStr] }) as unknown as TemplateStringsArray;
 
-    const updated = db.prepare('SELECT * FROM jobs WHERE id = ?').get(id);
-    return NextResponse.json({ job: rowToJob(updated as Record<string, unknown>) });
+    await db(strings, ...values);
+
+    const updated = await db`SELECT * FROM jobs WHERE id = ${id}`;
+    return NextResponse.json({ job: rowToJob(updated[0] as Record<string, unknown>) });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to update job' },
@@ -128,7 +133,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Job ID required' }, { status: 400 });
     }
 
-    db.prepare('DELETE FROM jobs WHERE id = ?').run(id);
+    await db`DELETE FROM jobs WHERE id = ${id}`;
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(

@@ -39,79 +39,50 @@ export async function GET(): Promise<NextResponse> {
     const db = getDb();
 
     // Total count
-    const totalRow = db.prepare('SELECT COUNT(*) as count FROM jobs').get() as { count: number };
-    const total = totalRow.count;
+    const totalRow = await db`SELECT COUNT(*) as count FROM jobs`;
+    const total = parseInt(totalRow[0].count as string, 10);
 
     // By status
-    const statusRows = db.prepare(
-      'SELECT status, COUNT(*) as count FROM jobs GROUP BY status'
-    ).all() as Array<{ status: string; count: number }>;
+    const statusRows = await db`SELECT status, COUNT(*) as count FROM jobs GROUP BY status`;
     const byStatus: Record<string, number> = {};
-    for (const row of statusRows) byStatus[row.status] = row.count;
+    for (const row of statusRows) byStatus[row.status as string] = parseInt(row.count as string, 10);
 
-    // Scoring stats
-    const scoredRow = db.prepare(
-      'SELECT COUNT(*) as count FROM jobs WHERE fit_score IS NOT NULL'
-    ).get() as { count: number };
-    const scored = scoredRow.count;
+    const scoredRow = await db`SELECT COUNT(*) as count FROM jobs WHERE fit_score IS NOT NULL`;
+    const scored = parseInt(scoredRow[0].count as string, 10);
 
-    const avgRow = db.prepare(
-      'SELECT AVG(fit_score) as avg FROM jobs WHERE fit_score IS NOT NULL'
-    ).get() as { avg: number | null };
-    const avgFitScore = avgRow.avg !== null ? Math.round(avgRow.avg) : null;
+    const avgRow = await db`SELECT AVG(fit_score) as avg FROM jobs WHERE fit_score IS NOT NULL`;
+    const avgFitScore = avgRow[0].avg !== null ? Math.round(parseFloat(avgRow[0].avg as string)) : null;
 
     // Top 5 scored jobs
-    const topRows = db.prepare(`
+    const topRows = await db`
       SELECT id, title, company, fit_score
       FROM jobs
       WHERE fit_score IS NOT NULL
       ORDER BY fit_score DESC
       LIMIT 5
-    `).all() as Array<{ id: string; title: string; company: string; fit_score: number }>;
+    `;
     const topScored = topRows.map(r => ({
-      id: r.id, title: r.title, company: r.company, fitScore: r.fit_score,
+      id: r.id as string, title: r.title as string, company: r.company as string, fitScore: r.fit_score as number,
     }));
 
     // Apply recommendations
-    const applyRow = db.prepare(
-      "SELECT COUNT(*) as count FROM jobs WHERE apply_recommendation = 'apply'"
-    ).get() as { count: number };
-    const skipRow = db.prepare(
-      "SELECT COUNT(*) as count FROM jobs WHERE apply_recommendation = 'skip'"
-    ).get() as { count: number };
-    const reachRow = db.prepare(
-      "SELECT COUNT(*) as count FROM jobs WHERE apply_recommendation = 'reach_out_first'"
-    ).get() as { count: number };
+    const applyRow = await db`SELECT COUNT(*) as count FROM jobs WHERE apply_recommendation = 'apply'`;
+    const skipRow = await db`SELECT COUNT(*) as count FROM jobs WHERE apply_recommendation = 'skip'`;
+    const reachRow = await db`SELECT COUNT(*) as count FROM jobs WHERE apply_recommendation = 'reach_out_first'`;
 
     // Discovery time buckets
-    const todayRow = db.prepare(
-      "SELECT COUNT(*) as count FROM jobs WHERE date(discovered_at) = date('now')"
-    ).get() as { count: number };
-    const weekRow = db.prepare(
-      "SELECT COUNT(*) as count FROM jobs WHERE discovered_at >= datetime('now', '-7 days')"
-    ).get() as { count: number };
+    const todayRow = await db`SELECT COUNT(*) as count FROM jobs WHERE DATE(discovered_at) = CURRENT_DATE`;
+    const weekRow = await db`SELECT COUNT(*) as count FROM jobs WHERE discovered_at >= NOW() - INTERVAL '7 days'`;
 
     // Pipeline milestones
-    const clRow = db.prepare(
-      "SELECT COUNT(*) as count FROM jobs WHERE cover_letter IS NOT NULL AND cover_letter != ''"
-    ).get() as { count: number };
-    const appliedRow = db.prepare(
-      "SELECT COUNT(*) as count FROM jobs WHERE status IN ('applied', 'viewed', 'interview', 'offer')"
-    ).get() as { count: number };
-    const interviewRow = db.prepare(
-      "SELECT COUNT(*) as count FROM jobs WHERE status = 'interview'"
-    ).get() as { count: number };
-    const offerRow = db.prepare(
-      "SELECT COUNT(*) as count FROM jobs WHERE status = 'offer'"
-    ).get() as { count: number };
+    const clRow = await db`SELECT COUNT(*) as count FROM jobs WHERE cover_letter IS NOT NULL AND cover_letter != ''`;
+    const appliedRow = await db`SELECT COUNT(*) as count FROM jobs WHERE status IN ('applied', 'viewed', 'interview', 'offer')`;
+    const interviewRow = await db`SELECT COUNT(*) as count FROM jobs WHERE status = 'interview'`;
+    const offerRow = await db`SELECT COUNT(*) as count FROM jobs WHERE status = 'offer'`;
 
     // Domain coverage
-    const domainRow = db.prepare(
-      "SELECT COUNT(*) as count FROM jobs WHERE company_domain IS NOT NULL AND company_domain != ''"
-    ).get() as { count: number };
-    const researchedRow = db.prepare(
-      'SELECT COUNT(*) as count FROM jobs WHERE researched_at IS NOT NULL'
-    ).get() as { count: number };
+    const domainRow = await db`SELECT COUNT(*) as count FROM jobs WHERE company_domain IS NOT NULL AND company_domain != ''`;
+    const researchedRow = await db`SELECT COUNT(*) as count FROM jobs WHERE researched_at IS NOT NULL`;
 
     const stats: DashboardStats = {
       total,
@@ -119,18 +90,18 @@ export async function GET(): Promise<NextResponse> {
       scored,
       avgFitScore,
       topScored,
-      applyCount: applyRow.count,
-      skipCount: skipRow.count,
-      reachOutCount: reachRow.count,
-      discoveredToday: todayRow.count,
-      discoveredThisWeek: weekRow.count,
-      withCoverLetter: clRow.count,
-      applied: appliedRow.count,
-      interviews: interviewRow.count,
-      offers: offerRow.count,
-      withDomain: domainRow.count,
-      withoutDomain: total - domainRow.count,
-      researched: researchedRow.count,
+      applyCount: parseInt(applyRow[0].count as string, 10),
+      skipCount: parseInt(skipRow[0].count as string, 10),
+      reachOutCount: parseInt(reachRow[0].count as string, 10),
+      discoveredToday: parseInt(todayRow[0].count as string, 10),
+      discoveredThisWeek: parseInt(weekRow[0].count as string, 10),
+      withCoverLetter: parseInt(clRow[0].count as string, 10),
+      applied: parseInt(appliedRow[0].count as string, 10),
+      interviews: parseInt(interviewRow[0].count as string, 10),
+      offers: parseInt(offerRow[0].count as string, 10),
+      withDomain: parseInt(domainRow[0].count as string, 10),
+      withoutDomain: total - parseInt(domainRow[0].count as string, 10),
+      researched: parseInt(researchedRow[0].count as string, 10),
     };
 
     return NextResponse.json(stats);

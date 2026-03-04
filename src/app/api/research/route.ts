@@ -10,36 +10,30 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDb();
-    const row = db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId);
-    if (!row) {
+    const rows = await db`SELECT * FROM jobs WHERE id = ${jobId}`;
+    if (rows.length === 0) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    const job = rowToJob(row as Record<string, unknown>);
+    const job = rowToJob(rows[0] as Record<string, unknown>);
     if (!job) {
       return NextResponse.json({ error: 'Invalid job' }, { status: 400 });
     }
 
     const research = await researchCompany(job.company, job.companyDomain);
 
-    db.prepare(`
+    await db`
       UPDATE jobs SET
-        company_summary = ?,
-        company_size = ?,
-        funding_stage = ?,
-        recent_news = ?,
-        researched_at = datetime('now'),
-        updated_at = datetime('now')
-      WHERE id = ?
-    `).run(
-      research.companySummary,
-      research.companySize,
-      research.fundingStage,
-      JSON.stringify(research.recentNews),
-      jobId
-    );
+        company_summary = ${research.companySummary},
+        company_size = ${research.companySize},
+        funding_stage = ${research.fundingStage},
+        recent_news = ${JSON.stringify(research.recentNews)},
+        researched_at = NOW(),
+        updated_at = NOW()
+      WHERE id = ${jobId}
+    `;
 
-    logEvent(jobId, 'researched', `${research.companySize} / ${research.fundingStage}`);
+    await logEvent(jobId, 'researched', `${research.companySize} / ${research.fundingStage}`);
 
     return NextResponse.json(research);
   } catch (error) {

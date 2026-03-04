@@ -1,7 +1,23 @@
-import { genAI, MODELS, withRetry } from '@/lib/claude';
+import { anthropic, MODELS } from '@/lib/claude';
+import { getDb } from '@/lib/db';
 import { Job } from '@/types';
 import fs from 'fs';
 import path from 'path';
+
+async function getResumeContent(): Promise<string> {
+  try {
+    const resumePath = path.join(process.cwd(), 'data', 'resume.md');
+    return fs.readFileSync(resumePath, 'utf-8');
+  } catch {
+    // Fallback to DB (Vercel serverless — no local filesystem write)
+    const db = getDb();
+    const rows = await db`SELECT value FROM settings WHERE key = 'resume'`;
+    if (rows.length > 0) {
+      return typeof rows[0].value === 'string' ? rows[0].value : JSON.stringify(rows[0].value);
+    }
+    return 'Resume not available.';
+  }
+}
 
 async function tryFetchCompanyContent(domain: string): Promise<string | null> {
   if (!domain) return null;
@@ -30,7 +46,7 @@ async function tryFetchCompanyContent(domain: string): Promise<string | null> {
         if (text.length > 200) return text;
       }
     } catch {
-      // Continue to next URL
+      // continue to next URL
     }
   }
   return null;
@@ -40,8 +56,7 @@ export async function generateCoverLetter(
   job: Job,
   talkingPoints: string[] = []
 ): Promise<string> {
-  const resumePath = path.join(process.cwd(), 'data', 'resume.md');
-  const resumeContent = fs.readFileSync(resumePath, 'utf-8');
+  const resumeContent = await getResumeContent();
 
   let companyContext = '';
   if (job.companyDomain) {
@@ -60,7 +75,7 @@ export async function generateCoverLetter(
     companyContext += `\nRecent news:\n${recentNews}`;
   }
 
-  const systemInstruction = `You are a professional cover letter writer who crafts direct, confident letters for senior candidates.
+  const systemPrompt = `You are a professional cover letter writer who crafts direct, confident letters for senior candidates.
 
 STRICT RULES:
 - Maximum 3 paragraphs, no more than 200 words total
@@ -76,7 +91,7 @@ STRICT RULES:
 Candidate resume:
 ${resumeContent}`;
 
-  const prompt = `Write a cover letter for this role:
+  const userPrompt = `Write a cover letter for this role:
 
 **Company:** ${job.company}
 **Role:** ${job.title}
@@ -89,13 +104,14 @@ ${job.jdRaw?.slice(0, 3000) || 'No JD available'}
 ${talkingPoints.map((p, i) => `${i + 1}. ${p}`).join('\n')}
 ${companyContext}
 
-Write the letter now. Address it "Dear Hiring Team," and sign off with candidate's name.`;
+Write the letter now. Address it "Dear Hiring Team," and sign off with the candidate's name.`;
 
-  const model = genAI.getGenerativeModel({
+  const response = await anthropic.messages.create({
     model: MODELS.smart,
-    systemInstruction,
+    max_tokens: 600,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
   });
 
-  const result = await withRetry(() => model.generateContent(prompt));
-  return result.response.text();
+  return response.content[0].type === 'text' ? response.content[0].text : '';
 }

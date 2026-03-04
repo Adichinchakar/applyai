@@ -9,34 +9,46 @@
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | Foundation & Core Build | ✅ COMPLETE |
-| 2 | Configuration & Real Data | ✅ COMPLETE (1 blocker — see below) |
-| 3 | Discovery & Scoring Pipeline | 🔴 BLOCKED — Gemini quota = 0 |
-| 4 | Apply Automation | 🔴 BLOCKED — needs API key + resume.pdf |
-| 5 | UI Polish & Quality of Life | 🔵 Planned |
+| 2 | Configuration & Real Data | ✅ COMPLETE |
+| 3 | Discovery & Scoring Pipeline | 🟡 READY — needs ANTHROPIC_API_KEY |
+| 4 | Apply Automation | 🟡 READY — needs ANTHROPIC_API_KEY + resume.pdf |
+| 5 | UI Polish & Quality of Life | 🟡 IN PROGRESS (Antigravity Day 1–2) |
 | 6 | Reliability & Alternative Sources | 🔵 Planned |
+| 7 | Deployment & Database Migration | ✅ COMPLETE |
 
 ---
 
-## 🔴 ACTIVE BLOCKERS (fix these before testing anything)
+## 🟡 ACTIVE SETUP STEPS
 
-| # | Blocker | Fix | Time |
-|---|---------|-----|------|
-| 1 | **Gemini API quota = 0** | Regenerate key in a NEW AI Studio project at `aistudio.google.com` → paste into `.env.local` → restart server | 5 min |
-| 2 | **`data/resume.pdf` missing** | Convert `resume.md` → PDF. Use browser print or Pandoc. Save as `applyai/data/resume.pdf` | 5 min |
+| # | Step | How | Time |
+|---|------|-----|------|
+| 1 | **Add ANTHROPIC_API_KEY** | Get key at `console.anthropic.com` → paste into `.env.local` → add to Vercel env vars | 5 min |
+| 2 | **Clean junk jobs from DB** | Call `POST /api/admin/cleanup-jobs` once (curl or browser fetch) | 1 min |
+| 3 | **Convert resume.md → PDF** | Open `data/resume.md` in Chrome → Ctrl+P → Save as PDF → `data/resume.pdf` | 5 min |
 
-### Fix #1 Step-by-Step:
-1. Go to `aistudio.google.com`
-2. Click project dropdown (top-left) → **New Project**
-3. In new project → **Get API key** → **Create API key**
-4. Copy the `AIza...` key
-5. Open `applyai/.env.local` → replace `GEMINI_API_KEY=...` line
-6. Restart dev server: `npm run dev`
-7. Test: POST to `/api/jobs/score` with any job ID from dashboard
+### Step 1 — Add Anthropic API Key:
+1. Go to `console.anthropic.com` → API Keys → Create Key
+2. Open `applyai/.env.local` → replace `ANTHROPIC_API_KEY=your_anthropic_key_here`
+3. In Vercel dashboard → Project Settings → Environment Variables → add `ANTHROPIC_API_KEY`
+4. Restart dev server: `npm run dev`
+5. Test: POST to `/api/jobs/score` with any job ID
 
-### Fix #2 Step-by-Step:
+### Step 2 — Clean junk jobs (run once):
+```js
+// Paste in browser console on https://applyai-eta.vercel.app
+fetch('/api/admin/cleanup-jobs', { method: 'POST' }).then(r => r.json()).then(console.log)
+```
+
+### Step 3 — Resume PDF (for Playwright apply):
 - Open Chrome → navigate to `C:\Users\Admin\Desktop\Hunt job project\applyai\data\resume.md`
-- Press Ctrl+P → "Print" → Destination: "Save as PDF"
-- Save as `C:\Users\Admin\Desktop\Hunt job project\applyai\data\resume.pdf`
+- Press Ctrl+P → Destination: Save as PDF → save as `applyai/data/resume.pdf`
+
+### AI Provider Change (Session 5):
+- **Switched from Gemini → Anthropic Claude** — Gemini quota was hitting 0 consistently
+- `src/lib/claude.ts` now exports `anthropic` client + `MODELS` using `@anthropic-ai/sdk`
+- Models: `claude-sonnet-4-5` (smart) · `claude-3-haiku-20240307` (fast)
+- All generation files updated: `fit-scorer.ts`, `cover-letter.ts`, `resume-tailor.ts`, `company-research.ts`, `fill-form.ts`
+- `data/resume.md` updated to match actual PDF resume content exactly
 
 ---
 
@@ -207,6 +219,17 @@ Test with real URLs:
 - Add a cron endpoint: `GET /api/jobs/discover?auto=true`
 - Or use a simple interval scheduler
 - Run discovery every 4-6 hours automatically
+
+---
+
+## Phase 7 — Deployment & Database Migration ✅ COMPLETE
+
+**Done (Session 4):**
+- [x] Initialized Git repository and pushed codebase to GitHub.
+- [x] Migrated database from SQLite to Neon Postgres Serverless (`@neondatabase/serverless`).
+- [x] Refactored all API routes to use tagged template literals natively for proper typing (`db\`SELECT ...\``).
+- [x] Migrated local file storage of `preferences.json` to the Postgres DB (`settings` table) to support Vercel serverless environments.
+- [x] Deployed and linked the application to Vercel Production (`https://applyai-eta.vercel.app`).
 
 ---
 

@@ -10,12 +10,12 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDb();
-    const row = db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId);
-    if (!row) {
+    const rows = await db`SELECT * FROM jobs WHERE id = ${jobId}`;
+    if (rows.length === 0) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    const job = rowToJob(row as Record<string, unknown>);
+    const job = rowToJob(rows[0] as Record<string, unknown>);
     if (!job || !job.jdRaw) {
       return NextResponse.json({ error: 'Job has no description' }, { status: 400 });
     }

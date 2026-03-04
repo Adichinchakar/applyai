@@ -1,5 +1,5 @@
 import { Page } from 'playwright';
-import { genAI, MODELS } from '@/lib/claude';
+import { anthropic, MODELS } from '@/lib/claude';
 import { FormField, ApplicationData } from '@/types';
 import fs from 'fs';
 import path from 'path';
@@ -12,15 +12,6 @@ async function analyzeFormWithVision(
 ): Promise<FormField[]> {
   const screenshot = await page.screenshot({ fullPage: false });
   const screenshotBase64 = screenshot.toString('base64');
-
-  const model = genAI.getGenerativeModel({ model: MODELS.smart });
-
-  const imagePart = {
-    inlineData: {
-      data: screenshotBase64,
-      mimeType: 'image/png' as const,
-    },
-  };
 
   const prompt = `Analyze this job application form screenshot. Return a JSON array of form fields to fill.
 
@@ -51,8 +42,31 @@ For cover letter fields, use value: "[COVER_LETTER]" as placeholder.
 
 Return ONLY a valid JSON array, no other text. If you detect a CAPTCHA, return: [{"label":"CAPTCHA","selectorHint":"captcha","fieldType":"checkbox","value":"CAPTCHA_REQUIRED","required":true}]`;
 
-  const result = await model.generateContent([imagePart, prompt]);
-  const text = result.response.text();
+  const response = await anthropic.messages.create({
+    model: MODELS.smart,
+    max_tokens: 1024,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: 'image/png',
+              data: screenshotBase64,
+            },
+          },
+          {
+            type: 'text',
+            text: prompt,
+          },
+        ],
+      },
+    ],
+  });
+
+  const text = response.content[0].type === 'text' ? response.content[0].text : '';
 
   try {
     const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
@@ -139,23 +153,36 @@ export async function fillApplicationForm(
       }
     }
 
-    // Take verification screenshot
+    // Take verification screenshot and ask Claude to verify
     await page.waitForTimeout(1000);
     const verifyScreenshot = await page.screenshot({ fullPage: false });
     const verifyBase64 = verifyScreenshot.toString('base64');
 
-    // Verify with Gemini vision
-    const model = genAI.getGenerativeModel({ model: MODELS.smart });
-    const verifyImagePart = {
-      inlineData: { data: verifyBase64, mimeType: 'image/png' as const },
-    };
+    const verifyResponse = await anthropic.messages.create({
+      model: MODELS.smart,
+      max_tokens: 256,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: verifyBase64,
+              },
+            },
+            {
+              type: 'text',
+              text: 'Are the form fields filled in? Return JSON: {"filled": true/false, "issues": ["any issues found"], "readyToSubmit": true/false}',
+            },
+          ],
+        },
+      ],
+    });
 
-    const verifyResult = await model.generateContent([
-      verifyImagePart,
-      'Are the form fields filled in? Return JSON: {"filled": true/false, "issues": ["any issues found"], "readyToSubmit": true/false}',
-    ]);
-
-    const verifyText = verifyResult.response.text();
+    const verifyText = verifyResponse.content[0].type === 'text' ? verifyResponse.content[0].text : '';
     let verifyData = { filled: true, issues: [] as string[], readyToSubmit: true };
 
     try {
@@ -168,14 +195,13 @@ export async function fillApplicationForm(
     onEvent('filled', {
       message: 'Form filled successfully',
       screenshot: `data:image/png;base64,${verifyBase64}`,
-      ...verifyData
+      ...verifyData,
     });
 
     return {
       success: true,
-      screenshot: `data:image/png;base64,${verifyBase64}`
+      screenshot: `data:image/png;base64,${verifyBase64}`,
     };
-
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     onEvent('error', { message });

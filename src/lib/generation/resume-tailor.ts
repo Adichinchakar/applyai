@@ -1,4 +1,5 @@
-import { genAI, MODELS, withRetry } from '@/lib/claude';
+import { anthropic, MODELS } from '@/lib/claude';
+import { getDb } from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
 
@@ -9,22 +10,30 @@ export interface ResumeTailorResult {
   summary: string;
 }
 
+async function getResumeContent(): Promise<string> {
+  try {
+    const resumePath = path.join(process.cwd(), 'data', 'resume.md');
+    return fs.readFileSync(resumePath, 'utf-8');
+  } catch {
+    const db = getDb();
+    const rows = await db`SELECT value FROM settings WHERE key = 'resume'`;
+    if (rows.length > 0) {
+      return typeof rows[0].value === 'string' ? rows[0].value : JSON.stringify(rows[0].value);
+    }
+    return 'Resume not available.';
+  }
+}
+
 export async function tailorResume(
   jobTitle: string,
   company: string,
   jobDescription: string
 ): Promise<ResumeTailorResult> {
-  const resumePath = path.join(process.cwd(), 'data', 'resume.md');
-  const resumeContent = fs.readFileSync(resumePath, 'utf-8');
-
-  const model = genAI.getGenerativeModel({
-    model: MODELS.smart,
-    systemInstruction: `You are an expert resume writer who tailors resumes to match job descriptions while keeping all content truthful.`,
-  });
+  const resumeContent = await getResumeContent();
 
   const prompt = `Tailor this resume for the following job. Return a JSON object with:
-- tailoredContent: The full tailored resume in markdown
-- keywordsMatched: Array of JD keywords found/added in resume
+- tailoredContent: The full tailored resume in markdown (same structure, reordered bullets + mirrored JD keywords — never invent experience)
+- keywordsMatched: Array of JD keywords found or naturally present in the resume
 - bulletReordered: The single most relevant bullet point you moved to top
 - summary: 1-sentence summary of changes made
 
@@ -38,8 +47,14 @@ ${resumeContent}
 
 Return ONLY valid JSON, no other text.`;
 
-  const result = await withRetry(() => model.generateContent(prompt));
-  const text = result.response.text();
+  const response = await anthropic.messages.create({
+    model: MODELS.fast,
+    max_tokens: 2048,
+    system: 'You are an expert resume writer who tailors resumes to match job descriptions while keeping all content truthful. Never fabricate experience or metrics.',
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const text = response.content[0].type === 'text' ? response.content[0].text : '';
 
   try {
     const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
@@ -49,7 +64,7 @@ Return ONLY valid JSON, no other text.`;
       tailoredContent: resumeContent,
       keywordsMatched: [],
       bulletReordered: '',
-      summary: 'Could not parse tailoring result'
+      summary: 'Could not parse tailoring result',
     };
   }
 }

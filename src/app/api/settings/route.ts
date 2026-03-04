@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-
-const PREFS_PATH = path.join(process.cwd(), 'data', 'preferences.json');
+import { getDb } from '@/lib/db';
 
 export async function GET() {
   try {
-    const prefsContent = fs.readFileSync(PREFS_PATH, 'utf-8');
-    const preferences = JSON.parse(prefsContent);
+    const db = getDb();
+    const rows = await db`SELECT value FROM settings WHERE key = 'preferences'`;
+    let preferences = null;
+
+    if (rows.length > 0) {
+      const raw = rows[0].value;
+      try {
+        preferences = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      } catch {
+        preferences = null;
+      }
+    }
 
     return NextResponse.json({
       preferences,
-      apiKey: process.env.GEMINI_API_KEY ? '***' + process.env.GEMINI_API_KEY.slice(-4) : '',
+      apiKey: process.env.ANTHROPIC_API_KEY ? '***' + process.env.ANTHROPIC_API_KEY.slice(-4) : '',
     });
   } catch {
     return NextResponse.json({ preferences: null, apiKey: '' });
@@ -23,7 +30,12 @@ export async function POST(request: NextRequest) {
     const { preferences } = await request.json();
 
     if (preferences) {
-      fs.writeFileSync(PREFS_PATH, JSON.stringify(preferences, null, 2));
+      const db = getDb();
+      await db`
+        INSERT INTO settings (key, value)
+        VALUES ('preferences', ${preferences as object})
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+      `;
     }
 
     return NextResponse.json({ success: true });

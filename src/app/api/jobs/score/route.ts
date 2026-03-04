@@ -13,45 +13,35 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDb();
-    const row = db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId);
-    if (!row) {
+    const rows = await db`SELECT * FROM jobs WHERE id = ${jobId}`;
+    if (rows.length === 0) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    const job = rowToJob(row as Record<string, unknown>);
+    const job = rowToJob(rows[0] as Record<string, unknown>);
     if (!job || !job.jdRaw) {
       return NextResponse.json({ error: 'Job has no description to score' }, { status: 400 });
     }
 
     const result = await scoreJobFit(job.title, job.company, job.jdRaw);
 
-    db.prepare(`
+    await db`
       UPDATE jobs SET
-        fit_score = ?,
-        skills_match = ?,
-        seniority_match = ?,
-        domain_match = ?,
-        red_flags = ?,
-        green_flags = ?,
-        talking_points = ?,
-        apply_recommendation = ?,
+        fit_score = ${result.overall},
+        skills_match = ${result.skillsMatch},
+        seniority_match = ${result.seniorityMatch},
+        domain_match = ${result.domainMatch},
+        red_flags = ${JSON.stringify(result.redFlags)},
+        green_flags = ${JSON.stringify(result.greenFlags)},
+        talking_points = ${JSON.stringify(result.talkingPoints)},
+        apply_recommendation = ${result.applyRecommendation},
         status = 'scored',
-        scored_at = datetime('now'),
-        updated_at = datetime('now')
-      WHERE id = ?
-    `).run(
-      result.overall,
-      result.skillsMatch,
-      result.seniorityMatch,
-      result.domainMatch,
-      JSON.stringify(result.redFlags),
-      JSON.stringify(result.greenFlags),
-      JSON.stringify(result.talkingPoints),
-      result.applyRecommendation,
-      jobId
-    );
+        scored_at = NOW(),
+        updated_at = NOW()
+      WHERE id = ${jobId}
+    `;
 
-    logEvent(jobId, 'scored', `Score: ${result.overall}/10 - ${result.applyRecommendation}`);
+    await logEvent(jobId, 'scored', `Score: ${result.overall}/10 - ${result.applyRecommendation}`);
 
     return NextResponse.json(result);
   } catch (error) {

@@ -13,27 +13,27 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDb();
-    const row = db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId);
-    if (!row) {
+    const rows = await db`SELECT * FROM jobs WHERE id = ${jobId}`;
+    if (rows.length === 0) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    const job = rowToJob(row as Record<string, unknown>);
+    const job = rowToJob(rows[0] as Record<string, unknown>);
     if (!job) {
       return NextResponse.json({ error: 'Invalid job data' }, { status: 400 });
     }
 
     const coverLetter = await generateCoverLetter(job, job.talkingPoints || []);
 
-    db.prepare(`
+    await db`
       UPDATE jobs SET
-        cover_letter = ?,
+        cover_letter = ${coverLetter},
         status = CASE WHEN status = 'scored' OR status = 'queued' THEN 'cover_letter_ready' ELSE status END,
-        updated_at = datetime('now')
-      WHERE id = ?
-    `).run(coverLetter, jobId);
+        updated_at = NOW()
+      WHERE id = ${jobId}
+    `;
 
-    logEvent(jobId, 'cover_letter_generated', `${coverLetter.length} characters`);
+    await logEvent(jobId, 'cover_letter_generated', `${coverLetter.length} characters`);
 
     return NextResponse.json({ coverLetter });
   } catch (error) {

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/header';
 import { Save, Upload, Eye, EyeOff, FileText, CheckCircle2, Loader2 } from 'lucide-react';
 import { UserPreferences } from '@/types';
+import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
   const [prefs, setPrefs] = useState<UserPreferences>({
@@ -49,15 +50,21 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ preferences: prefs }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || 'Save failed — check console');
+        return;
+      }
       setSaved(true);
+      toast.success('Settings saved!');
       setTimeout(() => setSaved(false), 2000);
     } catch {
-      console.error('Save failed');
+      toast.error('Network error — could not save settings');
     } finally {
       setSaving(false);
     }
@@ -347,13 +354,13 @@ export default function SettingsPage() {
           >
             <h2 className="text-sm font-semibold" style={{ color: '#F4F4F5' }}>API Keys</h2>
             <div className="space-y-2">
-              <label className="text-xs" style={{ color: '#A1A1AA' }}>Gemini API Key (from aistudio.google.com)</label>
+              <label className="text-xs" style={{ color: '#A1A1AA' }}>Anthropic API Key (from console.anthropic.com)</label>
               <div className="flex gap-2">
                 <input
                   type={showKey ? 'text' : 'password'}
                   value={apiKey}
                   onChange={e => setApiKey(e.target.value)}
-                  placeholder="sk-ant-..."
+                  placeholder="sk-ant-api03-..."
                   className="flex-1 px-3 py-2 rounded-xl text-sm border outline-none"
                   style={inputStyle}
                 />
@@ -366,7 +373,7 @@ export default function SettingsPage() {
                 </button>
               </div>
               <p className="text-xs" style={{ color: '#52525B' }}>
-                Set in .env.local for security. This form shows current value only.
+                Key is set in .env.local (local) and Vercel Environment Variables (production). This field shows the current status only.
               </p>
             </div>
           </section>

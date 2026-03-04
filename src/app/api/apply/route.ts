@@ -23,14 +23,14 @@ export async function POST(request: NextRequest) {
 
       try {
         const db = getDb();
-        const row = db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId);
-        if (!row) {
+        const rows = await db`SELECT * FROM jobs WHERE id = ${jobId}`;
+        if (rows.length === 0) {
           send('error', { message: 'Job not found' });
           controller.close();
           return;
         }
 
-        const job = rowToJob(row as Record<string, unknown>);
+        const job = rowToJob(rows[0] as Record<string, unknown>);
         if (!job) {
           send('error', { message: 'Invalid job data' });
           controller.close();
@@ -38,12 +38,15 @@ export async function POST(request: NextRequest) {
         }
 
         // Update status to applying
-        db.prepare('UPDATE jobs SET status = \'applying\', updated_at = datetime(\'now\') WHERE id = ?').run(jobId);
-        logEvent(jobId, 'applying_started', `Navigating to ${job.jobUrl}`);
+        await db`UPDATE jobs SET status = 'applying', updated_at = NOW() WHERE id = ${jobId}`;
+        await logEvent(jobId, 'applying_started', `Navigating to ${job.jobUrl}`);
 
         // Load preferences for application data
-        const prefsPath = path.join(process.cwd(), 'data', 'preferences.json');
-        const prefs = JSON.parse(fs.readFileSync(prefsPath, 'utf-8'));
+        let prefs: Record<string, any> = {};
+        const prefsRows = await db`SELECT value FROM settings WHERE key = 'preferences'`;
+        if (prefsRows.length > 0) {
+          prefs = typeof prefsRows[0].value === 'string' ? JSON.parse(prefsRows[0].value) : prefsRows[0].value;
+        }
 
         const requiredPrefs = ['fullName', 'email', 'phone', 'linkedinUrl'];
         const missingPrefs = requiredPrefs.filter(key => !prefs[key]);
@@ -88,8 +91,8 @@ export async function POST(request: NextRequest) {
           });
           // Don't auto-submit - human must confirm
         } else {
-          db.prepare('UPDATE jobs SET status = \'discovered\', updated_at = datetime(\'now\') WHERE id = ?').run(jobId);
-          logEvent(jobId, 'apply_failed', result.error);
+          await db`UPDATE jobs SET status = 'discovered', updated_at = NOW() WHERE id = ${jobId}`;
+          await logEvent(jobId, 'apply_failed', result.error);
         }
 
         controller.close();

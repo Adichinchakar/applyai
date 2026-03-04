@@ -25,14 +25,14 @@ export async function POST(request: NextRequest): Promise<Response> {
   const db = getDb();
 
   // Find unscored jobs that have a JD (can't score without description)
-  const rows = db.prepare(`
+  const rows = await db`
     SELECT * FROM jobs
     WHERE fit_score IS NULL
       AND jd_raw IS NOT NULL
       AND jd_raw != ''
     ORDER BY discovered_at DESC
-    LIMIT ?
-  `).all(limit);
+    LIMIT ${limit}
+  `;
 
   const jobs = rows
     .map(r => rowToJob(r as Record<string, unknown>))
@@ -61,33 +61,23 @@ export async function POST(request: NextRequest): Promise<Response> {
         try {
           const result = await scoreJobFit(job.title, job.company, job.jdRaw!);
 
-          db.prepare(`
+          await db`
             UPDATE jobs SET
-              fit_score = ?,
-              skills_match = ?,
-              seniority_match = ?,
-              domain_match = ?,
-              red_flags = ?,
-              green_flags = ?,
-              talking_points = ?,
-              apply_recommendation = ?,
+              fit_score = ${result.overall},
+              skills_match = ${result.skillsMatch},
+              seniority_match = ${result.seniorityMatch},
+              domain_match = ${result.domainMatch},
+              red_flags = ${JSON.stringify(result.redFlags)},
+              green_flags = ${JSON.stringify(result.greenFlags)},
+              talking_points = ${JSON.stringify(result.talkingPoints)},
+              apply_recommendation = ${result.applyRecommendation},
               status = 'scored',
-              scored_at = datetime('now'),
-              updated_at = datetime('now')
-            WHERE id = ?
-          `).run(
-            result.overall,
-            result.skillsMatch,
-            result.seniorityMatch,
-            result.domainMatch,
-            JSON.stringify(result.redFlags),
-            JSON.stringify(result.greenFlags),
-            JSON.stringify(result.talkingPoints),
-            result.applyRecommendation,
-            job.id
-          );
+              scored_at = NOW(),
+              updated_at = NOW()
+            WHERE id = ${job.id}
+          `;
 
-          logEvent(job.id, 'batch_scored', `Score: ${result.overall}/10 — ${result.applyRecommendation}`);
+          await logEvent(job.id, 'batch_scored', `Score: ${result.overall}/10 — ${result.applyRecommendation}`);
           scored++;
           if (result.applyRecommendation === 'apply') apply++;
           else if (result.applyRecommendation === 'skip') skip++;

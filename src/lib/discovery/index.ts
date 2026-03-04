@@ -1,7 +1,6 @@
 import { discoverRemoteOKJobs } from './remoteok';
-import { discoverWellfoundJobs } from './wellfound';
 import { discoverWeWorkRemotelyJobs } from './weworkremotely';
-import { discoverIndeedJobs } from './indeed-rss';
+import { discoverRemotiveJobs } from './remotive';
 import { extractCompanyDomain } from './domain-extractor';
 import { getDb } from '@/lib/db';
 import { DiscoveredJob } from '@/types';
@@ -114,8 +113,12 @@ function satisfiesSalaryMin(job: DiscoveredJob, targetSalaryMin: number): boolea
 // ─── Main orchestrator ───────────────────────────────────────────────────────
 
 export async function runDiscovery(): Promise<DiscoveryResult> {
-  const prefsPath = path.join(process.cwd(), 'data', 'preferences.json');
-  const preferences = JSON.parse(fs.readFileSync(prefsPath, 'utf-8'));
+  const db = getDb();
+  let preferences: Record<string, any> = {};
+  const rows = await db`SELECT value FROM settings WHERE key = 'preferences'`;
+  if (rows.length > 0) {
+    preferences = typeof rows[0].value === 'string' ? JSON.parse(rows[0].value) : rows[0].value;
+  }
 
   const {
     targetRoles = [] as string[],
@@ -128,23 +131,21 @@ export async function runDiscovery(): Promise<DiscoveryResult> {
   // Build keyword set from the user's saved targetRoles
   const roleKeywords = buildRoleKeywords(targetRoles);
 
-  // Run all four sources in parallel — each fails independently and returns []
-  const [remoteokJobs, wellfoundJobs, wwrJobs, indeedJobs] = await Promise.all([
+  // Run all sources in parallel — each fails independently and returns []
+  const [remoteokJobs, wwrJobs, remotiveJobs] = await Promise.all([
     discoverRemoteOKJobs(targetRoles).catch(() => [] as DiscoveredJob[]),
-    discoverWellfoundJobs(targetRoles).catch(() => [] as DiscoveredJob[]),
     discoverWeWorkRemotelyJobs().catch(() => [] as DiscoveredJob[]),
-    discoverIndeedJobs(targetRoles, targetLocations).catch(() => [] as DiscoveredJob[]),
+    discoverRemotiveJobs().catch(() => [] as DiscoveredJob[]),
   ]);
 
   // Track raw source counts (before any filtering)
   const sources: Record<string, number> = {
     remoteok: remoteokJobs.length,
-    wellfound: wellfoundJobs.length,
     weworkremotely: wwrJobs.length,
-    indeed: indeedJobs.length,
+    remotive: remotiveJobs.length,
   };
 
-  const allJobs = [...remoteokJobs, ...wellfoundJobs, ...wwrJobs, ...indeedJobs];
+  const allJobs = [...remoteokJobs, ...wwrJobs, ...remotiveJobs];
 
   // ① Deduplicate by URL (in-memory pass before DB insert)
   const seen = new Set<string>();
@@ -189,36 +190,25 @@ export async function runDiscovery(): Promise<DiscoveryResult> {
     );
   });
 
-  // ⑤ Save to database (INSERT OR IGNORE — job_url is UNIQUE)
-  const db = getDb();
+  // ⑤ Save to database (ON CONFLICT DO NOTHING — job_url is UNIQUE)
   let newCount = 0;
   let duplicateCount = 0;
 
-  const insertStmt = db.prepare(`
-    INSERT OR IGNORE INTO jobs (
-      id, title, company, company_domain, location, remote_type,
-      salary_min, salary_max, job_url, ats_type, jd_raw, posted_at, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'discovered')
-  `);
-
   for (const job of filtered) {
     try {
-      const result = insertStmt.run(
-        uuidv4(),
-        job.title,
-        job.company,
-        job.companyDomain || null,
-        job.location || null,
-        job.remoteType || 'unknown',
-        job.salaryMin || null,
-        job.salaryMax || null,
-        job.jobUrl,
-        job.atsType || 'generic',
-        job.jdRaw || null,
-        job.postedAt || null
-      );
+      const result = await db`
+          INSERT INTO jobs (
+            id, title, company, company_domain, location, remote_type,
+            salary_min, salary_max, job_url, ats_type, jd_raw, posted_at, status
+          ) VALUES (
+            ${uuidv4()}, ${job.title}, ${job.company}, ${job.companyDomain || null}, ${job.location || null}, ${job.remoteType || 'unknown'},
+            ${job.salaryMin || null}, ${job.salaryMax || null}, ${job.jobUrl}, ${job.atsType || 'generic'}, ${job.jdRaw || null}, ${job.postedAt || null}, 'discovered'
+          )
+          ON CONFLICT (job_url) DO NOTHING
+          RETURNING id;
+        `;
 
-      if (result.changes > 0) {
+      if (result.length > 0) {
         newCount++;
       } else {
         duplicateCount++;
